@@ -484,6 +484,19 @@ legend { font-weight: 700; padding: 0 4px; font-size: .92rem; }
 .pdf-chk { display: flex; gap: 6px; align-items: center; font-size: .9rem; }
 .linklike { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
 
+/* Kimlik ve geçmiş */
+.det summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; cursor: pointer; list-style: none; }
+.det summary::-webkit-details-marker { display: none; }
+.det summary h3 { margin: 0; }
+.det summary h3::before { content: '▸ '; color: var(--muted); }
+.det[open] summary h3::before { content: '▾ '; }
+.det-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.det-long { display: grid; gap: 8px; margin-top: 8px; }
+.det label { display: grid; gap: 3px; font-size: .85rem; color: var(--muted); min-width: 0; }
+.det input, .det textarea { width: 100%; min-width: 0; color: var(--fg); }
+.det textarea { resize: vertical; }
+@media (max-width: 560px) { .det-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 </style>
 
 <header class="top">
@@ -860,7 +873,8 @@ function generateCharacter(db, opts) {
   const subrace = subraceList.length ? (subraceList.find((s) => s.id === opts.subrace) || R('subrace').pick(subraceList)) : null;
   const subs = db.subclasses.filter((s) => s.class === cls.id);
   const MAN0 = !!(opts.overrides && opts.overrides.manual);
-  const subclass = subs.length ? (subs.find((s) => s.id === opts.subclass) || (MAN0 ? null : R('subclass').pick(subs))) : null;
+  // 2014 rules: no subclass before the class's subclass level (it is picked on the level-up page)
+  const subclass = subs.length && L >= cls.subclass_level ? (subs.find((s) => s.id === opts.subclass) || (MAN0 ? null : R('subclass').pick(subs))) : null;
   const hasSub = subclass && L >= cls.subclass_level;
   const bg = (opts.background && db.byId.backgrounds[opts.background]) || R('background').pick(db.backgrounds);
   const lv = classLevel(cls, L);
@@ -1648,8 +1662,9 @@ window.HB_HELP = `
     const cls = DB.byId.classes[cid];
     const subs = DB.subclasses.filter((s) => s.class === cid);
     $('#g-sub-label').textContent = cls ? cls.subclass_label : 'Alt sınıf';
-    $('#g-sub').innerHTML = opt('', 'Rastgele') + subs.map((s) => opt(s.id, s.name + hbMark(s), s.id === cur)).join('');
-    $('#g-sub').disabled = !cid;
+    const lvl = +$('#g-level').value, locked = cls && lvl < cls.subclass_level;
+    $('#g-sub').innerHTML = locked ? opt('', cls.subclass_level + '. seviyede açılır') : opt('', 'Rastgele') + subs.map((s) => opt(s.id, s.name + hbMark(s), s.id === cur)).join('');
+    $('#g-sub').disabled = !cid || locked || !subs.length;
   }
   function fillSubrace() {
     const r = DB.byId.races[$('#g-race').value]; const cur = $('#g-subrace').value;
@@ -1659,7 +1674,7 @@ window.HB_HELP = `
   }
   $('#g-class').addEventListener('change', fillSub);
   $('#g-race').addEventListener('change', fillSubrace);
-  $('#g-level').addEventListener('input', () => { $('#g-level-out').textContent = $('#g-level').value; });
+  $('#g-level').addEventListener('input', () => { $('#g-level-out').textContent = $('#g-level').value; fillSub(); });
 
   let current = null;
   let lvlUp = null; // { uid, prev } while the level-up page is open
@@ -1677,8 +1692,9 @@ window.HB_HELP = `
   $('#gen-form').addEventListener('submit', (e) => { e.preventDefault(); generate(formOpts()); });
   $('#g-random').addEventListener('click', () => {
     ['#g-class', '#g-race', '#g-bg', '#g-align'].forEach((s) => ($(s).value = ''));
-    fillSub(); fillSubrace(); $('#g-name').value = '';
+    $('#g-name').value = '';
     const L = 1 + Math.floor(Math.random() * 20); $('#g-level').value = L; $('#g-level-out').textContent = L;
+    fillSub(); fillSubrace();
     generate(formOpts());
   });
 
@@ -1759,6 +1775,8 @@ window.HB_HELP = `
             <div class="vital"><span class="v">${sgn(ch.prof)}</span><span class="k">Yeterlilik</span></div>
             <div class="vital"><span class="v">${esc(ch.hitDice)}</span><span class="k">Hit dice</span></div>
             <div class="vital"><span class="v">${ch.passive}</span><span class="k">Pasif algı</span></div>
+            <div class="vital"><span class="v">${10 + (ch.skillTotals.investigation || 0)}</span><span class="k">Pasif Investigation</span></div>
+            <div class="vital"><span class="v">${10 + (ch.skillTotals.insight || 0)}</span><span class="k">Pasif Insight</span></div>
           </div><div class="subnote">AC: ${esc(ch.acHow)}. HP: ${ch.opts.hp === 'roll' ? 'zarla (' + ch.hpRolls.join(', ') + ')' : 'ortalama'}${ch.hpPerLevelBonus ? ', seviye başına +' + ch.hpPerLevelBonus : ''}.</div></section>
           <section class="block"><h3>Saldırılar</h3><div class="tbl-wrap"><table><thead><tr><th>Silah</th><th>Atak</th><th>Hasar</th><th>Tür</th><th>Not</th></tr></thead><tbody>${atks || '<tr><td colspan="5">Silah yok</td></tr>'}</tbody></table></div></section>
           <section class="block"><h3>Kurtulma zarları</h3><ul class="plist">${saves}</ul></section>
@@ -1777,6 +1795,7 @@ window.HB_HELP = `
             <div class="chips" style="margin-top:8px">${ch.languages.map((p) => `<span class="chip on">${esc(p)}</span>`).join('')}</div>
             ${ch.asiLog.length ? `<div class="subnote">Yetenek artışları: ${ch.asiLog.map((a) => 'sv ' + a.level + ' ' + (a.feat ? 'feat ' + esc(a.feat) : Object.entries(a.inc || {}).map(([k, v]) => short[k] + ' +' + v).join(', ') + (a.pending ? ' (seçim bekliyor)' : ''))).join(' · ')}</div>` : ''}
             ${ch.rolled ? `<div class="subnote">Zar sonuçları: ${ch.rolled.join(', ')}</div>` : ''}</section>
+          ${saved ? detailsHTML(ch) : ''}
           ${saved ? `<section class="block"><h3>Notlar</h3><textarea class="notes" id="nt-${esc(ch.uid)}" aria-label="Notlar">${esc(ch.notes || '')}</textarea></section>` : ''}
         </div>
       </div></article>`;
@@ -1800,8 +1819,8 @@ window.HB_HELP = `
     // subclass
     let subPane = '';
     if (subs.length) {
-      const lockNote = ch.level < cls.subclass_level ? `<p class="subnote">${esc(cls.subclass_label)} ${cls.subclass_level}. seviyede açılır. Şimdiden seçebilirsin; seviye atlayınca otomatik gelir.</p>` : '';
-      subPane = lockNote + `<div class="pick-grid">${subs.map((x) => {
+      if (ch.level < cls.subclass_level) subPane = `<p class="empty">${esc(cls.subclass_label)} ${cls.subclass_level}. seviyede açılır. O seviyeye geldiğinde <b>Seviye atla</b> sayfasında seçeceksin.</p>`;
+      else subPane = `<div class="pick-grid">${subs.map((x) => {
         const feats = Object.keys(x.levels || {}).sort((a, b) => a - b).flatMap((l) => (x.levels[l] || []).map((id) => DB.features[id] ? `${l}: ${DB.features[id].name}` : '')).filter(Boolean);
         return `<label class="pick-card${x.id === ch.subclassId ? ' on' : ''}"><input type="radio" name="sub-${esc(key)}" data-c="sub" value="${esc(x.id)}" ${x.id === ch.subclassId ? 'checked' : ''}>
           <span class="pc-name">${esc(x.name)}${x.homebrew ? ' ★' : ''}</span><span class="pc-meta">${esc(x.flavor || cls.subclass_label)} · ${esc(x.source || '')}</span>
@@ -1940,11 +1959,22 @@ window.HB_HELP = `
     $$('.sp-group', root).forEach((g) => { g.hidden = !$$('.sp-row', g).some((r) => !r.hidden); });
   }
   function charOf(sheet) { const u = sheet && sheet.dataset.uid; return u ? chars.find((c) => c.uid === u) : current; }
+  // identity and story fields: kept on the character, printed on the PDF and on the official sheet
+  const DET_SHORT = [['player', 'Oyuncu'], ['xp', 'XP'], ['age', 'Yaş'], ['height', 'Boy'], ['weight', 'Kilo'], ['eyes', 'Göz'], ['skin', 'Ten'], ['hair', 'Saç']];
+  const DET_LONG = [['appearance', 'Görünüş'], ['backstory', 'Geçmiş hikâyesi'], ['faction', 'Örgüt adı', 1], ['allies', 'Müttefikler ve örgütler'], ['treasure', 'Hazine']];
+  function detailsHTML(ch) {
+    const d = ch.details || {}, u = esc(ch.uid);
+    const filled = Object.keys(d).some((k) => d[k]);
+    return `<section class="block"><details class="det" ${filled ? 'open' : ''}><summary><h3>Kimlik ve geçmiş</h3><span class="subnote">PDF'te ve resmi kâğıtta görünür</span></summary>
+      <div class="det-grid">${DET_SHORT.map(([k, l]) => `<label>${l}<input data-det="${k}" data-uid="${u}" value="${esc(d[k] || '')}"></label>`).join('')}</div>
+      <div class="det-long">${DET_LONG.map(([k, l, one]) => `<label>${l}${one ? `<input data-det="${k}" data-uid="${u}" value="${esc(d[k] || '')}">` : `<textarea data-det="${k}" data-uid="${u}" rows="3">${esc(d[k] || '')}</textarea>`}</label>`).join('')}</div>
+    </details></section>`;
+  }
   function regen(old, params, msgText) {
     let n;
     try { n = generateCharacter(DB, params); } catch (err) { console.error(err); toast('Güncellenemedi: ' + err.message); return; }
     if (old.uid) {
-      n.uid = old.uid; n.notes = old.notes; n.savedAt = old.savedAt; n.name = old.name;
+      n.uid = old.uid; n.notes = old.notes; n.details = old.details; n.savedAt = old.savedAt; n.name = old.name;
       saveChar(n); openSaved(n.uid);
     } else { n.uid = null; current = n; $('#sheet-wrap').innerHTML = sheetHTML(n, false); applySpellFilter($('#sheet-wrap')); }
     if (msgText) toast(msgText);
@@ -2053,6 +2083,12 @@ window.HB_HELP = `
     }
   });
   document.addEventListener('input', (e) => {
+    const k = e.target.dataset && e.target.dataset.det;
+    if (k) {
+      const c = chars.find((x) => x.uid === e.target.dataset.uid); if (!c) return;
+      c.details = Object.assign({}, c.details, { [k]: e.target.value });
+      clearTimeout(window.__svT); window.__svT = setTimeout(() => saveChar(c), 600); return;
+    }
     const m = e.target.id && e.target.id.match(/^(nm|nt)-(.+)$/); if (!m) return;
     const c = chars.find((x) => x.uid === m[2]); if (!c) return;
     if (m[1] === 'nm') c.name = e.target.value; else c.notes = e.target.value;
@@ -2065,7 +2101,7 @@ window.HB_HELP = `
   /* ---------- Özel oluşturma: every choice made by hand, one page per step ---------- */
   const STEPS = [
     ['sinif', 'Sınıf', 'Sınıfını ve seviyeni seç. Kartlarda can zarı, kurtulma zarları ve büyü yeteneği var.'],
-    ['alt', 'Alt sınıf', 'Alt sınıfını seç. Henüz açılmadıysa şimdiden seçebilir ya da boş bırakabilirsin.'],
+    ['alt', 'Alt sınıf', 'Alt sınıfını seç. Seviyen henüz yetmiyorsa bu adım boş kalır.'],
     ['irk', 'Irk', 'Irkını ve varsa alt ırkını seç. Yetenek bonusları ve özellikler kartta.'],
     ['gecmis', 'Geçmiş', 'Geçmişin sana skill, alet, dil ve ekipman verir.'],
     ['stat', 'Yetenek puanları', 'Yöntemi seç, puanları kendin dağıt. Irk bonusu ve seviye artışları burada.'],
@@ -2186,8 +2222,8 @@ window.HB_HELP = `
     if (id === 'alt') {
       const cls = DB.byId.classes[P.cls]; if (!cls) return '<p class="empty">Önce sınıf seç.</p>';
       const subs = DB.subclasses.filter((x) => x.class === cls.id);
-      const lock = P.level < cls.subclass_level ? `<p class="subnote">${esc(cls.subclass_label)} ${cls.subclass_level}. seviyede açılır. Şimdi seçersen seviye atlayınca gelir.${P.subclass ? ' <button type="button" class="btn small" data-w="subclear">Seçimi kaldır</button>' : ''}</p>` : '';
-      return lock + `<div class="pick-grid">${subs.map((x) => {
+      if (P.level < cls.subclass_level) return `<p class="empty">${esc(cls.subclass_label)} ${cls.subclass_level}. seviyede açılır. Karakterin şu an ${P.level}. seviye, bu adımı geçebilirsin. O seviyeye geldiğinde <b>Seviye atla</b> sayfasında seçeceksin.</p>`;
+      return `<div class="pick-grid">${subs.map((x) => {
         const feats = Object.keys(x.levels || {}).sort((a, b) => a - b).flatMap((l) => (x.levels[l] || []).map((fid) => (DB.features[fid] ? `${l}: ${DB.features[fid].name}` : ''))).filter(Boolean);
         return card('sub', x.id, x.id === P.subclass, x.name + hbMark(x), (x.flavor || cls.subclass_label) + (x.source ? ' · ' + x.source : ''), short2(D(x), 260), feats.join(' · '));
       }).join('')}</div>${subs.some((x) => x.outline) ? OUTLINE_NOTE : ''}`;
@@ -2269,7 +2305,7 @@ window.HB_HELP = `
     const scrollTop = () => { const t = $('#wiz'); if (t && t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: 'start' }); };
     if (w === 'go') { if (!v) return; wiz.step = v; wizSave(); wizRender(); scrollTop(); return; }
     if (w === 'reset') { if (!el.dataset.confirm) { el.dataset.confirm = '1'; el.textContent = 'Emin misin? Tekrar bas'; return; } wizNew(); }
-    if (w === 'level') P.level = +v;
+    if (w === 'level') { P.level = +v; const c = DB.byId.classes[P.cls]; if (c && P.level < c.subclass_level) P.subclass = ''; }
     if (w === 'cls' && v !== P.cls) { P.cls = v; P.subclass = ''; ['skills', 'features', 'expertise', 'spells', 'equip', 'asi', 'tools', 'spellSalt'].forEach((k) => delete ov[k]); }
     if (w === 'sub') P.subclass = v;
     if (w === 'subclear') P.subclass = '';
@@ -3545,7 +3581,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   .zp .soft{border:1px solid #b9b0a3;border-radius:6px;padding:6px 8px}
   .zp .num{font-family:"IBM Plex Mono",Menlo,monospace}
   .zp .head{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:end;border-bottom:3px double #1d1a16;padding-bottom:10px;margin-bottom:12px}
-  .zp .hf{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px}
+  .zp .hf{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px}
   .zp .hf div{border-bottom:1px solid #b9b0a3;padding-bottom:2px;font-weight:600;min-height:28px}
   .zp .hf div .lbl{display:block;font-weight:700}
   .zp .cols{display:grid;grid-template-columns:200px 250px 1fr;gap:12px;align-items:start}
@@ -3584,6 +3620,33 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   .zp .sp{display:grid;grid-template-columns:14px 1fr;gap:4px;padding:3px 0;border-bottom:1px dotted #d4ccc0}
   .zp .sp .meta{color:#6b6257;font-size:10px}
   .zp .sp .d{font-size:10.5px}
+  .zp .pas{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center;margin-top:3px}
+  .zp .pas b{display:block;font-size:18px}
+  .zp .pas span{font-size:9px;color:#6b6257}
+  .zp .flist .fd{color:#4a443c;font-size:9.5px}
+  .zp ul.res{list-style:none;margin:2px 0 0;padding:0;font-size:11px}
+  .zp ul.res li{display:grid;grid-template-columns:1fr auto auto;gap:2px 8px;align-items:center;padding:2px 0;border-bottom:1px dotted #d4ccc0}
+  .zp ul.res li:last-child{border-bottom:0}
+  .zp ul.res li i{grid-column:1/-1;font-size:9px;color:#6b6257;font-style:normal;margin-top:-2px}
+  .zp ul.res .uses{white-space:nowrap}
+  .zp .att{display:grid;grid-template-columns:14px 1fr;gap:4px;align-items:end;height:17px}
+  .zp .att span:last-child{border-bottom:1px solid #b9b0a3;height:12px}
+  .zp .sl{display:grid;grid-template-columns:repeat(3,1fr);gap:3px 14px;font-size:11px}
+  .zp .sl div{display:flex;align-items:center;gap:4px;border-bottom:1px dotted #d4ccc0;padding:2px 0}
+  .zp .sl b{min-width:40px}
+  .zp .spt{display:grid;grid-template-columns:12px 22px 1.35fr .72fr .72fr .8fr 42px 2.1fr;gap:6px;align-items:start;padding:3px 0;border-bottom:1px solid #d4ccc0;font-size:10px;line-height:1.3}
+  .zp .spt.h{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#6b6257;font-weight:700;border-bottom:1.5px solid #1d1a16;padding-top:6px}
+  .zp .spt.lv{background:#f3efe8}
+  .zp .spt b{font-size:10.5px}
+  .zp .spt .crm span{display:inline-block;width:12px;text-align:center;color:#c9c1b4}
+  .zp .spt .crm span.on{color:#1d1a16;font-weight:700}
+  .zp .spt .nt{color:#4a443c;font-size:9.5px}
+  .zp .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .zp .dbox{overflow:hidden;display:flex;flex-direction:column;gap:5px}
+  .zp .dcol{display:flex;flex-direction:column;gap:12px}
+  .zp .wt{white-space:pre-wrap;line-height:1.4}
+  .zp .fac{display:flex;gap:10px;align-items:flex-end;margin-bottom:4px}
+  .zp .sym{width:74px;height:74px;border:1px dashed #b9b0a3;border-radius:6px;padding:3px 5px}
   .zp .lines div{border-bottom:1px solid #d4ccc0;height:22px}
   `;
 
@@ -3594,6 +3657,65 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
   const DB = () => Z.DB;
   const featDesc = (f, table) => { const src = f.id && table && table[f.id]; return src ? Z.D(src) : f.desc || ''; };
 
+  // per-class trackers (2014 rules), from the class table extras
+  function resources(ch) {
+    const x = ch.classExtra || {}, L = ch.level, m = ch.mods, list = [];
+    const add = (name, val, uses, note) => list.push({ name, val, uses, note });
+    const dice = (d) => (d ? d.dice_count + 'd' + d.dice_value : '');
+    switch (ch.classId) {
+      case 'barbarian':
+        add('Rage', '+' + (x.rage_damage_bonus || 2) + ' hasar', x.rage_count >= 20 ? 0 : x.rage_count, x.rage_count >= 20 ? 'sınırsız' : 'uzun dinlenme');
+        if (x.brutal_critical_dice) add('Brutal Critical', '+' + x.brutal_critical_dice + ' zar'); break;
+      case 'bard':
+        add('Bardic Inspiration', 'd' + (x.bardic_inspiration_die || 6), Math.max(1, m.cha), L >= 5 ? 'kısa dinlenme' : 'uzun dinlenme');
+        if (x.song_of_rest_die) add('Song of Rest', 'd' + x.song_of_rest_die); break;
+      case 'cleric':
+        if (x.channel_divinity_charges) add('Channel Divinity', '', x.channel_divinity_charges, 'kısa dinlenme');
+        if (x.destroy_undead_cr) add('Destroy Undead', 'CR ' + (x.destroy_undead_cr < 1 ? '1/2' : x.destroy_undead_cr) + ' ve altı'); break;
+      case 'druid':
+        if (L >= 2) add('Wild Shape', 'CR ' + ({ 0.25: '1/4', 0.5: '1/2' }[x.wild_shape_max_cr] || x.wild_shape_max_cr) + (x.wild_shape_fly ? ', uçan' : x.wild_shape_swim ? ', yüzen' : ''), 2, 'kısa dinlenme'); break;
+      case 'fighter':
+        add('Second Wind', '1d10+' + L, 1, 'kısa dinlenme');
+        if (x.action_surges) add('Action Surge', '', x.action_surges, 'kısa dinlenme');
+        if (x.indomitable_uses) add('Indomitable', '', x.indomitable_uses, 'uzun dinlenme');
+        if (x.extra_attacks) add('Saldırı sayısı', (1 + x.extra_attacks) + ' / Attack'); break;
+      case 'monk':
+        add('Martial Arts', dice(x.martial_arts));
+        if (x.ki_points) add('Ki', '', x.ki_points, 'kısa dinlenme · DC ' + (8 + ch.prof + m.wis));
+        if (x.unarmored_movement) add('Unarmored Movement', '+' + x.unarmored_movement + ' ft'); break;
+      case 'paladin':
+        add('Lay on Hands', 'havuz ' + 5 * L + ' HP', 0, 'uzun dinlenme');
+        add('Divine Sense', '', 1 + Math.max(0, m.cha), 'uzun dinlenme');
+        if (L >= 3) add('Channel Divinity', '', 1, 'kısa dinlenme');
+        if (x.aura_range) add('Aura menzili', x.aura_range + ' ft'); break;
+      case 'ranger':
+        if (x.favored_enemies) add('Favored Enemy', x.favored_enemies + ' tür');
+        if (x.favored_terrain) add('Natural Explorer', x.favored_terrain + ' arazi'); break;
+      case 'rogue':
+        add('Sneak Attack', dice(x.sneak_attack)); break;
+      case 'sorcerer':
+        if (x.sorcery_points) add('Sorcery Points', '', x.sorcery_points, 'uzun dinlenme');
+        if (x.metamagic_known) add('Metamagic', x.metamagic_known + ' seçenek'); break;
+      case 'warlock':
+        if (x.invocations_known) add('Eldritch Invocations', x.invocations_known + ' adet'); break;
+      case 'wizard':
+        add('Arcane Recovery', 'en fazla ' + (x.arcane_recovery_levels || Math.ceil(L / 2)) + ' yuva seviyesi', 1, 'günde bir, kısa dinlenmede'); break;
+    }
+    const tr = (ch.traits || []).map((t) => ((t.id || '') + ' ' + (t.name || '')).toLowerCase().replace(/\s+/g, '-'));
+    const dv = tr.some((t) => /superior-darkvision/.test(t)) ? 120 : tr.some((t) => /darkvision/.test(t)) ? 60 : 0;
+    const race = Z.DB.byId.races && Z.DB.byId.races[ch.raceId];
+    const senses = [dv ? 'Darkvision ' + dv + ' ft' : 'Darkvision yok', 'Pasif Perception ' + ch.passive, 'Boyut: ' + ((race && race.size) || 'Medium'), 'Hız ' + ch.speed + ' ft'];
+    return { list, senses };
+  }
+  // shorten the feature summaries on page 1 until the page fits
+  function fitPage1(pg) {
+    const spans = Array.from(pg.querySelectorAll('.fd'));
+    for (const n of [150, 110, 80, 55, 35, 0]) {
+      spans.forEach((s) => { const t = s.dataset.full; s.textContent = n ? ' — ' + (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t) : ''; });
+      if (pg.scrollHeight <= pg.clientHeight + 1) return;
+    }
+  }
+
   function page1(ch) {
     const db = DB();
     const ab = AB().map((a) => `<div class="ab"><div class="lbl">${esc(abName(a))}</div><div class="m num">${sgn(ch.mods[a])}</div><div class="s num">${ch.scores[a]}</div></div>`).join('');
@@ -3602,12 +3724,15 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     const atk = (ch.attacks || []).slice(0, 6).map((a) => `<tr><td>${esc(a.name)}</td><td class="num">${a.bonus == null ? esc(a.save || '') : sgn(a.bonus)}</td><td>${esc(a.damage)} ${esc(a.type || '')}</td></tr>`).join('') || '<tr><td colspan="3">—</td></tr>';
     const eq = (ch.equipment || []).map((e) => (e.qty > 1 ? e.qty + '× ' : '') + e.name).concat(ch.equipmentText || []);
     const P = ch.personality || {};
-    const feats = (ch.features || []).map((f) => `<li>${f.level ? '<span class="num">' + f.level + '</span> · ' : ''}${esc(f.name)}${f.choice ? ' <i>(' + esc(f.choice) + ')</i>' : ''}</li>`)
-      .concat((ch.feats || []).map((f) => `<li>Feat · ${esc(f.name)}</li>`)).concat((ch.traits || []).map((t) => `<li>Irk · ${esc(t.name)}</li>`))
-      .concat(ch.bgFeature && ch.bgFeature.name ? [`<li>Geçmiş · ${esc(ch.bgFeature.name)}</li>`] : []);
+    const featById = {}; db.feats.forEach((f) => (featById[f.id] = f));
+    const fd = (t) => { t = String(t || '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim(); return t ? `<span class="fd" data-full="${esc(t)}"></span>` : ''; };
+    const feats = (ch.features || []).map((f) => `<li>${f.level ? '<span class="num">' + f.level + '</span> · ' : ''}<b>${esc(f.name)}</b>${f.choice ? ' <i>(' + esc(f.choice) + ')</i>' : ''}${fd(featDesc(f, db.features))}</li>`);
+    const otherFeats = [].concat((ch.feats || []).map((f) => `<li>Feat · <b>${esc(f.name)}</b>${fd(featDesc(f, featById))}</li>`)).concat((ch.traits || []).map((t) => `<li>Irk · <b>${esc(t.name)}</b>${fd(featDesc(t, db.traits))}</li>`))
+      .concat(ch.bgFeature && ch.bgFeature.name ? [`<li>Geçmiş · <b>${esc(ch.bgFeature.name)}</b>${fd(ch.bgFeature.desc)}</li>`] : []);
+    const res = resources(ch);
     const S = ch.spells;
     const head = [['Sınıf ve seviye', ch.className + ' ' + ch.level], [ch.subclassLabel || 'Alt sınıf', ch.subclassName || ''], ['Irk', ch.raceName + (ch.subraceName ? ' (' + ch.subraceName + ')' : '')],
-      ['Geçmiş', ch.backgroundName], ['Yönelim', (window.ALIGN_TR_EXPORT || {})[ch.alignment] || ch.alignment], ['Oyuncu', '']];
+      ['Geçmiş', ch.backgroundName], ['Yönelim', (window.ALIGN_TR_EXPORT || {})[ch.alignment] || ch.alignment], ['Oyuncu', DT(ch).player || ''], ['XP', DT(ch).xp || '']];
     return `<div class="zp">
       <div class="head"><div><div class="lbl">Karakter adı</div><h1>${esc(ch.name)}</h1></div>
         <div class="hf">${head.map(([l, v]) => `<div><span class="lbl">${esc(l)}</span>${esc(v)}</div>`).join('')}</div></div>
@@ -3617,23 +3742,52 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
           <div class="trio" style="grid-template-columns:1fr 1fr"><div class="box big"><div class="lbl">Prof. bonus</div><div class="v num">${sgn(ch.prof)}</div></div><div class="box big"><div class="lbl">Inspiration</div><div class="v">&nbsp;</div></div></div>
           <div class="box"><div class="lbl">Kurtulma zarları</div><ul class="pl">${saves}</ul></div>
           <div class="box"><div class="lbl">Skill'ler</div><ul class="pl">${skills}</ul></div>
-          <div class="box big"><div class="lbl">Pasif Perception</div><div class="v num">${ch.passive}</div></div>
+          <div class="box"><div class="lbl">Pasif değerler</div><div class="pas">${[['Perception', ch.passive], ['Investigation', 10 + (ch.skillTotals.investigation || 0)], ['Insight', 10 + (ch.skillTotals.insight || 0)]].map(([l, v]) => `<div><b class="num">${v}</b><span>${l}</span></div>`).join('')}</div></div>
         </div>
         <div class="stack">
           <div class="trio"><div class="box big"><div class="lbl">AC</div><div class="v num">${ch.ac}</div></div><div class="box big"><div class="lbl">Initiative</div><div class="v num">${sgn(ch.initiative)}</div></div><div class="box big"><div class="lbl">Hız</div><div class="v num">${ch.speed}<span style="font-size:11px"> ft</span></div></div></div>
           <div class="box"><div class="lbl">Can puanı</div><div class="hp"><div><div class="lbl">Maksimum</div><div class="num" style="font-size:20px;font-weight:700">${ch.hp}</div></div><div><div class="lbl">Şu anki</div><div class="blank"></div></div></div><div class="lbl" style="margin-top:4px">Geçici can</div><div class="blank" style="height:22px"></div></div>
-          <div class="trio" style="grid-template-columns:1fr 1.4fr"><div class="box"><div class="lbl">Hit dice</div><div class="num" style="font-size:15px;font-weight:700">${esc(ch.hitDice)}</div></div><div class="box"><div class="lbl">Ölüm kurtulmaları</div><div style="font-size:10px">Başarı <span class="circ"></span><span class="circ"></span><span class="circ"></span><br>Başarısız <span class="circ"></span><span class="circ"></span><span class="circ"></span></div></div></div>
+          <div class="trio" style="grid-template-columns:1fr 1.4fr"><div class="box"><div class="lbl">Hit dice</div><div class="num" style="font-size:15px;font-weight:700">${esc(ch.hitDice)}</div><div class="lbl" style="margin-top:3px">Kullanılan ____</div></div><div class="box"><div class="lbl">Ölüm kurtulmaları</div><div style="font-size:10px">Başarı <span class="circ"></span><span class="circ"></span><span class="circ"></span><br>Başarısız <span class="circ"></span><span class="circ"></span><span class="circ"></span></div></div></div>
           <div class="box"><div class="lbl">Saldırılar</div><table><thead><tr><th>Ad</th><th>İsabet</th><th>Hasar</th></tr></thead><tbody>${atk}</tbody></table>
             ${S ? `<div style="margin-top:6px;font-size:11px">Büyü: <b>${abShort(S.ability)}</b> · DC <b class="num">${S.dc}</b> · Saldırı <b class="num">${sgn(S.attack)}</b></div>` : ''}</div>
           <div class="box"><div class="lbl">Ekipman</div><div style="font-size:11px">${eq.map(esc).join(', ') || '—'}</div>
-            <div class="coins">${['CP', 'SP', 'EP', 'GP', 'PP'].map((c) => `<div>${c}<b class="num">${c === 'GP' && ch.gold ? ch.gold : ''}</b></div>`).join('')}</div></div>
+            <div class="coins">${['CP', 'SP', 'EP', 'GP', 'PP'].map((c) => `<div>${c}<b class="num">${c === 'GP' && ch.gold ? ch.gold : ''}</b></div>`).join('')}</div>
+            <div class="lbl" style="margin-top:6px">Attunement (en fazla 3)</div>${'<div class="att"><span class="circ"></span><span></span></div>'.repeat(3)}</div>
+          ${res.list.length ? `<div class="box"><div class="lbl">Sınıf kaynakları</div><ul class="res">${res.list.map((r) => `<li><span>${esc(r.name)}</span><span class="num">${esc(r.val || '')}</span>${r.uses ? `<span class="uses">${r.uses <= 12 ? '<span class="circ"></span>'.repeat(r.uses) : '<span class="num">' + r.uses + '</span> ____'}</span>` : '<span></span>'}${r.note ? `<i>${esc(r.note)}</i>` : ''}</li>`).join('')}</ul></div>` : ''}
+          ${otherFeats.length ? `<div class="box"><div class="lbl">Irk, feat ve geçmiş özellikleri</div><ul class="flist" style="font-size:11px">${otherFeats.join('')}</ul></div>` : ''}
+          <div class="box"><div class="lbl">Duyular ve beden</div><div style="font-size:11px">${res.senses.map(esc).join(' · ')}</div></div>
         </div>
         <div class="stack">
           <div class="box pers"><div class="lbl">Kişilik</div>${(P.traits || []).map((t) => `<p>${esc(t)}</p>`).join('')}
             <div class="lbl">İdeal</div><p>${esc(P.ideal || '')}</p><div class="lbl">Bağ</div><p>${esc(P.bond || '')}</p><div class="lbl">Kusur</div><p>${esc(P.flaw || '')}</p></div>
-          <div class="box"><div class="lbl">Özellikler ve yetenekler</div><ul class="flist" style="font-size:11px">${feats.join('')}</ul><div style="font-size:9.5px;color:#6b6257;margin-top:4px">Açıklamalar sonraki sayfalarda.</div></div>
+          <div class="box"><div class="lbl">Sınıf özellikleri</div><ul class="flist" style="font-size:11px">${feats.join('')}</ul><div style="font-size:9.5px;color:#6b6257;margin-top:4px">Tam açıklamalar sonraki sayfalarda.</div></div>
           <div class="box"><div class="lbl">Yeterlilikler</div><div style="font-size:10.5px">${esc([...new Set(ch.profNames || [])].join(', '))}</div>
             <div class="lbl" style="margin-top:5px">Diller</div><div style="font-size:10.5px">${esc((ch.languages || []).join(', '))}</div></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const DT = (ch) => ch.details || {};
+  // page 2: identity, appearance, story, allies, treasure (mostly write-in space)
+  function detailsPage(ch) {
+    const d = DT(ch);
+    const txt = (t, size) => (t ? `<div class="wt" style="font-size:${size || 11}px">${esc(t)}</div>` : '');
+    const small = [['Yaş', d.age], ['Boy', d.height], ['Kilo', d.weight], ['Göz', d.eyes], ['Ten', d.skin], ['Saç', d.hair]];
+    const extra = (ch.traits || []).map((t) => 'Irk · ' + t.name).concat((ch.feats || []).map((f) => 'Feat · ' + f.name)).concat(ch.bgFeature && ch.bgFeature.name ? ['Geçmiş · ' + ch.bgFeature.name] : []);
+    const lenSize = (t, big, small2) => (String(t || '').length > big ? small2 : 11);
+    return `<div class="zp">
+      <div class="head"><div><div class="lbl">Karakter adı</div><h1>${esc(ch.name)}</h1></div>
+        <div class="hf" style="grid-template-columns:repeat(3,1fr)">${small.map(([l, v]) => `<div><span class="lbl">${l}</span>${esc(v || '')}</div>`).join('')}</div></div>
+      <div class="dgrid">
+        <div class="box dbox" style="height:330px"><div class="lbl">Görünüş</div>${txt(d.appearance, lenSize(d.appearance, 500, 9.5))}</div>
+        <div class="box dbox" style="height:330px"><div class="lbl">Müttefikler ve örgütler</div>
+          <div class="fac"><div class="sym"><span class="lbl">Sembol</span></div><div style="flex:1"><span class="lbl">Örgüt adı</span><div style="border-bottom:1px solid #b9b0a3;min-height:18px;font-weight:600">${esc(d.faction || '')}</div></div></div>
+          ${txt(d.allies, lenSize(d.allies, 600, 9.5))}</div>
+        <div class="box dbox" style="height:${H - 34 - 30 - 90 - 330 - 24}px"><div class="lbl">Geçmiş hikâyesi</div>${txt(d.backstory, lenSize(d.backstory, 1400, 9.5))}</div>
+        <div class="dcol">
+          <div class="box dbox" style="flex:1"><div class="lbl">Ek özellikler</div><ul class="flist" style="font-size:11px">${extra.map((x) => `<li>${esc(x)}</li>`).join('') || '<li>—</li>'}</ul><div style="font-size:9.5px;color:#6b6257;margin-top:4px">Açıklamalar sonraki sayfalarda.</div></div>
+          <div class="box dbox" style="flex:1"><div class="lbl">Hazine</div>${txt(d.treasure)}</div>
         </div>
       </div>
     </div>`;
@@ -3662,13 +3816,14 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     if (ch.bgFeature && ch.bgFeature.name) blk(ch.bgFeature.name, 'Geçmiş: ' + ch.backgroundName, ch.bgFeature.desc);
     return out;
   }
+  const SPELL_HEAD = '<div class="spt h"><span></span><span>Sv</span><span>Büyü</span><span>Döküm</span><span>Menzil</span><span>Süre</span><span>K R M</span><span>Not</span></div>';
   function spellBlocks(ch) {
     const S = ch.spells, db = DB(); if (!S && !(ch.racialSpellIds || []).length) return [];
     const out = [];
     if (S) {
-      const slots = S.slots.map((n, i) => (n ? `<span style="margin-right:12px"><b>${i + 1}. sv</b> ${'<span class="circ"></span>'.repeat(n)}</span>` : '')).join('');
-      out.push(`<div class="blk"><div class="trio" style="grid-template-columns:repeat(3,1fr)"><div class="box big"><div class="lbl">Yetenek</div><div class="v">${abShort(S.ability)}</div></div><div class="box big"><div class="lbl">Kurtulma DC</div><div class="v num">${S.dc}</div></div><div class="box big"><div class="lbl">Büyü saldırısı</div><div class="v num">${sgn(S.attack)}</div></div></div>
-        <div class="soft" style="margin-top:8px"><div class="lbl">Büyü yuvaları${S.type === 'pact' ? ' (kısa dinlenmede yenilenir)' : ''}</div>${slots || '—'}</div></div>`);
+      const slots = S.slots.map((n, i) => (n ? `<div><b>${i + 1}. sv</b><span class="num">${n}</span> ${'<span class="circ"></span>'.repeat(n)}</div>` : '')).join('');
+      out.push(`<div class="blk"><div class="trio" style="grid-template-columns:repeat(4,1fr)"><div class="box big"><div class="lbl">Sınıf</div><div class="v" style="font-size:16px;line-height:1.7">${esc(ch.className)}</div></div><div class="box big"><div class="lbl">Yetenek</div><div class="v">${abShort(S.ability)}</div></div><div class="box big"><div class="lbl">Kurtulma DC</div><div class="v num">${S.dc}</div></div><div class="box big"><div class="lbl">Büyü saldırısı</div><div class="v num">${sgn(S.attack)}</div></div></div>
+        <div class="box" style="margin-top:8px"><div class="lbl">Büyü yuvaları · toplam ve harcanan${S.type === 'pact' ? ' (kısa dinlenmede yenilenir)' : ''}</div><div class="sl">${slots || '—'}</div></div></div>`);
     }
     const tag = {};
     const add = (id, t) => { if (!tag[id]) tag[id] = t || ''; };
@@ -3681,20 +3836,20 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       (S.arcanum || []).forEach((id) => add(id, 'arcanum'));
     }
     (ch.racialSpellIds || []).forEach((id) => add(id, 'ırk'));
-    const byLv = {};
-    Object.keys(tag).forEach((id) => { const s = db.byId.spells[id]; if (s) (byLv[s.level] = byLv[s.level] || []).push(s); });
-    Object.keys(byLv).sort((a, b) => a - b).forEach((l) => {
-      out.push(`<div class="blk" style="margin-bottom:2px"><h3 style="border-bottom:1px solid #1d1a16;margin-top:4px">${l == 0 ? 'Cantrip' : l + '. seviye'}</h3></div>`);
-      byLv[l].sort((a, b) => a.name.localeCompare(b.name)).forEach((s) => {
-        const t = tag[s.id];
-        out.push(`<div class="sp"><span class="${t === 'hazır' || t === 'hep hazır' ? 'dot p1' : l == 0 ? '' : 'dot'}" style="margin-top:3px"></span><div><b>${esc(s.name)}</b>${t ? ` <span class="meta">(${esc(t)})</span>` : ''}
-          <div class="meta">${esc(s.school || '')} · ${esc(s.casting_time || '')} · ${esc(s.range || '')} · ${esc(String(s.components || '').replace(/\s*\(.*\)$/, ''))} · ${esc(s.duration || '')}${s.concentration ? ' · C' : ''}${s.ritual ? ' · R' : ''}</div>
-          <div class="d">${esc(short(Z.D(s), 230))}</div></div></div>`);
-      });
+    const rows = [];
+    Object.keys(tag).forEach((id) => { const s = db.byId.spells[id]; if (s) rows.push(s); });
+    rows.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+    out.push(SPELL_HEAD);
+    rows.forEach((s) => {
+      const t = tag[s.id], comp = String(s.components || '');
+      const on = (c) => `<span class="${c ? 'on' : ''}">`;
+      out.push(`<div class="spt"><span class="${t === 'hazır' || t === 'hep hazır' ? 'dot p1' : s.level ? 'dot' : ''}" style="margin-top:2px"></span><span class="num">${s.level || 'C'}</span>
+        <span><b>${esc(s.name)}</b>${t && t !== 'hazır' ? `<br><span class="nt">${esc(t)}</span>` : ''}</span><span>${esc(s.casting_time || '')}</span><span>${esc(s.range || '')}</span><span>${esc(String(s.duration || '').replace(/^Concentration, /i, ''))}</span>
+        <span class="crm">${on(s.concentration)}K</span>${on(s.ritual)}R</span>${on(/\bM\b/.test(comp))}M</span></span><span class="nt">${esc(short(Z.D(s), 120))}</span></div>`);
     });
     return out;
   }
-  function flowPages(root, title, blocks, ch) {
+  function flowPages(root, title, blocks, ch, repeat) {
     const pages = [];
     let pg = null, body = null;
     const newPage = (cont) => {
@@ -3706,7 +3861,11 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     blocks.forEach((h) => {
       const tmp = document.createElement('div'); tmp.innerHTML = h; const el = tmp.firstElementChild;
       body.appendChild(el);
-      if (body.scrollHeight > body.clientHeight + 1 && body.children.length > 1) { body.removeChild(el); newPage(true); body.appendChild(el); }
+      if (body.scrollHeight > body.clientHeight + 1 && body.children.length > 1) {
+        body.removeChild(el); newPage(true);
+        if (repeat && h !== repeat) { const r = document.createElement('div'); r.innerHTML = repeat; body.appendChild(r.firstElementChild); }
+        body.appendChild(el);
+      }
     });
     return pages;
   }
@@ -3722,10 +3881,11 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const root = document.createElement('div'); root.className = 'zp-root';
     try {
-      root.innerHTML = `<style>${CSS}</style>` + (opts.extraOnly ? '' : page1(ch));
+      root.innerHTML = `<style>${CSS}</style>` + (opts.extraOnly ? '' : page1(ch) + detailsPage(ch));
       document.body.appendChild(root);
+      if (!opts.extraOnly) fitPage1(root.querySelector('.zp'));
       flowPages(root, 'Özellikler ve yetenekler', featureBlocks(ch), ch);
-      const sb = spellBlocks(ch); if (sb.length) flowPages(root, 'Büyüler', sb, ch);
+      const sb = spellBlocks(ch); if (sb.length) flowPages(root, 'Büyüler', sb, ch, SPELL_HEAD);
       if (!opts.extraOnly) { const np = document.createElement('div'); np.innerHTML = notesPage(ch); root.appendChild(np.firstElementChild); }
       const pages = Array.from(root.querySelectorAll('.zp'));
       pages.forEach((p, i) => { const f = document.createElement('div'); f.className = 'foot'; f.innerHTML = `<span>Zindan Defteri · ${esc(ch.name)} · ${esc(ch.className)} ${ch.level}</span><span>${(opts.offset || 0) + i + 1} / ${(opts.offset || 0) + pages.length}</span>`; p.appendChild(f); });
@@ -3889,13 +4049,16 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     set('equipment', (ch.equipment || []).map((e) => (e.qty > 1 ? e.qty + '× ' : '') + e.name).concat(ch.equipmentText || []).join(', '));
     set('personalitytraits', (PS.traits || []).join('\n')); set('ideals', PS.ideal); set('bonds', PS.bond); set('flaws', PS.flaw);
     set('featuresandtraits', (ch.features || []).map((f) => (f.level ? f.level + '. ' : '') + f.name + (f.choice ? ' (' + f.choice + ')' : '')).join('\n'));
-    set('proficiencieslang', 'Yeterlilikler: ' + [...new Set(ch.profNames || [])].join(', ') + '\n\nDiller: ' + (ch.languages || []).join(', '));
+    set('proficiencieslang', 'Pasif Investigation ' + (10 + (ch.skillTotals.investigation || 0)) + ' · Pasif Insight ' + (10 + (ch.skillTotals.insight || 0)) + '\n\nYeterlilikler: ' + [...new Set(ch.profNames || [])].join(', ') + '\n\nDiller: ' + (ch.languages || []).join(', '));
     const ft = [];
     (ch.traits || []).forEach((t) => ft.push('Irk · ' + t.name));
     (ch.feats || []).forEach((f) => ft.push('Feat · ' + f.name));
     if (ch.bgFeature && ch.bgFeature.name) ft.push('Geçmiş · ' + ch.bgFeature.name + ': ' + short(ch.bgFeature.desc, 220));
     set('feattraits', ft.join('\n'));
-    set('backstory', ch.notes);
+    const DTL = ch.details || {};
+    ['age', 'height', 'weight', 'eyes', 'skin', 'hair', 'allies', 'treasure', 'xp'].forEach((k) => set(k, DTL[k]));
+    set('playername', DTL.player); set('factionname', DTL.faction);
+    set('backstory', [DTL.appearance ? 'Görünüş: ' + DTL.appearance : '', DTL.backstory || ch.notes || ''].filter(Boolean).join('\n\n'));
     if (S) {
       set('spellcastingclass2', ch.className); set('spellcastingclass', ch.className);
       const ab = (window.AB_SHORT_EXPORT || {})[S.ability] || S.ability.toUpperCase();
