@@ -15,6 +15,10 @@ Güncellemek için yalnızca `index.html` dosyasını değiştirmen yeterli.
 
 Sunucu yoktur. Kaydedilen karakterler oyuncunun kendi tarayıcısında durur. Başka bir cihaza taşımak için **Karakterlerim > Hepsini dosyaya kaydet** ile dosya indir, diğer cihazda **Dosyadan yükle** ile yükle.
 
+## Resmi karakter kâğıdı
+
+**PDF indir > Resmi 5e karakter kâğıdı** seçeneği, Wizards of the Coast'un ücretsiz form alanlı kâğıdını otomatik doldurur. Kâğıdı bu repoya koyma: repo herkese açık ve kâğıdın dağıtım hakkı Wizards of the Coast'a ait. Her oyuncu kâğıdı kendi bilgisayarına indirip uygulamada bir kez seçer, kâğıt o tarayıcıda saklanır.
+
 ## Lisans
 
 Kural metinleri System Reference Document 5.1 (Wizards of the Coast, CC-BY-4.0) kaynaklıdır. Diğer içerikler kitapların kendi sözlerimizle yazılmış Türkçe özetleridir; kitap metni içermez.
